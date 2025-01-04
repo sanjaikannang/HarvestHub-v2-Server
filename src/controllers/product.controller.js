@@ -1,22 +1,29 @@
-import { CustomError } from '../utils/customError.js';
 import Product from '../models/product.model.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import handleUpload from '../services/cloudinaryService.js';
 import { PRODUCT_CONSTANTS } from '../constants/product.constants.js';
 
 
+// UploadProduct Controller
 export const uploadProduct = asyncHandler(async (req, res) => {
+
     // ===== Authorization Check =====
     // Verify that only farmers can upload products
     if (req.user.role !== "Farmer") {
-        throw new CustomError('Only Farmers can upload products', 403);
+        return res.status(403).json({
+            message: 'Only Farmers can upload products'
+        });
     }
+
 
     // ===== Image Upload Validation =====
     // Check if exactly REQUIRED_IMAGE_COUNT (3) images are uploaded
     if (!req.files || req.files.length !== PRODUCT_CONSTANTS.REQUIRED_IMAGE_COUNT) {
-        throw new CustomError(`Please upload exactly ${PRODUCT_CONSTANTS.REQUIRED_IMAGE_COUNT} images`, 400);
+        return res.status(400).json({
+            message: `Please upload exactly ${PRODUCT_CONSTANTS.REQUIRED_IMAGE_COUNT} images`
+        });
     }
+
 
     // ===== Request Body Validation =====
     // Destructure and validate required fields from request body
@@ -31,59 +38,93 @@ export const uploadProduct = asyncHandler(async (req, res) => {
         quantity,
     } = req.body;
 
-    // Convert date strings to Date objects for validation
+
+    // Basic input validation
+    if (!startingDate || !endingDate || !bidStartTime || !bidEndTime) {
+        return res.status(400).json({
+            message: 'All date and time fields are required'
+        });
+    }
+
+
+    // Convert all dates to UTC Date objects
+    const currentDate = new Date();
     const startDate = new Date(startingDate);
     const endDate = new Date(endingDate);
     const bidStart = new Date(bidStartTime);
     const bidEnd = new Date(bidEndTime);
 
+
     // ===== Date Range Validation =====
     // Calculate the difference in days between start and end dates
-    const daysDifference = Math.abs(endDate - startDate) / (1000 * 60 * 60 * 24);
-
-    // Validate that the date range is between 1 and 3 days
-    if (daysDifference < 1 || daysDifference > 3) {
-        throw new CustomError('The duration between start and end date must be between 1 and 3 days', 400);
+    if (startDate <= currentDate) {
+        return res.status(400).json({
+            message: 'Starting Date Must be in the Future !'
+        });
     }
 
-    // ===== Bid Time Validation =====
-    // Calculate the difference in milliseconds between bid start and end times
-    const bidTimeDifference = Math.abs(bidEnd - bidStart);
 
-    // Validate that the bid duration is between MIN_BID_DURATION and MAX_BID_DURATION
-    if (bidTimeDifference < PRODUCT_CONSTANTS.MIN_BID_DURATION ||
-        bidTimeDifference > PRODUCT_CONSTANTS.MAX_BID_DURATION) {
-        throw new CustomError(
-            `Bid duration must be between ${PRODUCT_CONSTANTS.MIN_BID_DURATION / (60 * 1000)} minutes and ` +
-            `${PRODUCT_CONSTANTS.MAX_BID_DURATION / (60 * 1000)} minutes`,
-            400
-        );
+    if (endDate <= startDate) {
+        return res.status(400).json({
+            message: 'Ending Date Must be After Starting Date !'
+        });
     }
 
-    // ===== Image Upload Processing =====
-    // Array to store Cloudinary image URLs
+
+    // Calculate time difference between start and end dates in hours
+    const hoursDifference = (endDate - startDate) / (1000 * 60 * 60);
+
+    // Validate 24-72 hour range (1-3 days)
+    if (hoursDifference < 24 || hoursDifference > 72) {
+        return res.status(400).json({
+            message: 'The Duration Between Start and End Date Must be Between 24 and 72 Hours (1-3 Days) !'
+        });
+    }
+
+
+    // Validate bid times are within the selected dates
+    if (bidStart < startDate || bidStart > endDate ||
+        bidEnd < startDate || bidEnd > endDate) {
+        return res.status(400).json({
+            message: 'Bid Start and End Times Must be Within the Selected Date Range !'
+        });
+    }
+
+
+    // Calculate bid duration in minutes
+    const bidDurationMinutes = (bidEnd - bidStart) / (1000 * 60);
+
+
+    // Validate bid duration (10-60 minutes)
+    if (bidDurationMinutes < 10 || bidDurationMinutes > 60) {
+        return res.status(400).json({
+            message: 'Bid Duration Must be Between 10 and 60 Minutes !'
+        });
+    }
+
+
+    // Image Upload Processing
     const imageUrls = [];
 
-    // Process and upload each image to Cloudinary
+
     for (const file of req.files) {
-        // Validate file data
         if (!file.mimetype || !file.buffer) {
-            throw new CustomError("Invalid file data", 400);
+            return res.status(400).json({
+                message: "Invalid File Data !"
+            });
         }
 
-        // Convert file to base64 URI format for Cloudinary
         const fileDataURI = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
-
-        // Upload to Cloudinary and store the secure URL
         const cldRes = await handleUpload(fileDataURI);
         imageUrls.push(cldRes.secure_url);
     }
 
-    // ===== Product Creation =====
-    // Calculate total bid amount based on starting price and quantity
+
+    // Calculate total bid amount
     const totalBidAmount = startingPrice * quantity;
 
-    // Create new product instance with validated data
+
+    // Create new product
     const newProduct = new Product({
         farmer: req.user._id,
         name,
@@ -98,13 +139,12 @@ export const uploadProduct = asyncHandler(async (req, res) => {
         images: imageUrls,
     });
 
-    // Save the product to database
+
     const savedProduct = await newProduct.save();
 
-    // ===== Response =====
-    // Send success response with farmer and product details
+
     res.status(201).json({
-        message: "Product created successfully!",
+        message: "Product Created Successfully !",
         farmer: {
             id: req.user._id,
             name: req.user.name,

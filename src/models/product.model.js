@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import { PRODUCT_STATUS, BIDDING_STATUS } from '../constants/product.constants.js';
+import { setBiddingStatusMiddleware } from '../utils/bidStatusManagement.js';
+
 
 const productSchema = new mongoose.Schema({
     name: {
@@ -93,9 +95,15 @@ const productSchema = new mongoose.Schema({
     timestamps: true
 });
 
+
+// Bidding Status Middleware
+productSchema.pre('save', setBiddingStatusMiddleware);
+
+
 // Add indexes for frequently queried fields
 productSchema.index({ farmer: 1, status: 1 });
 productSchema.index({ biddingStatus: 1, endingDate: 1 });
+
 
 const Product = mongoose.model('Product', productSchema);
 export default Product;

@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import connectDB from "../src/config/db.js";
 import userRoutes from "../src/routes/user.routes.js"
 import productRoutes from "../src/routes/product.routes.js"
+import { startCronJobs } from "./utils/cronJobs.js";
 
 dotenv.config();
 connectDB();
@@ -12,6 +13,9 @@ connectDB();
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// Cron job Function
+startCronJobs();
 
 // API Endpoints
 app.use('/user', userRoutes); // User Routes

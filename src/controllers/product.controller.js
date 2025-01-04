@@ -8,7 +8,7 @@ import { PRODUCT_CONSTANTS } from '../constants/product.constants.js';
 export const uploadProduct = asyncHandler(async (req, res) => {
 
     // ===== Authorization Check =====
-    // Verify that only farmers can upload products
+    // Ensure that only Farmers can upload products
     if (req.user.role !== "Farmer") {
         return res.status(403).json({
             message: 'Only Farmers can upload products'
@@ -16,8 +16,8 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     }
 
 
-    // ===== Image Upload Validation =====
-    // Check if exactly REQUIRED_IMAGE_COUNT (3) images are uploaded
+    // ===== Request Body Validation =====
+    // Destructure required fields from the request body
     if (!req.files || req.files.length !== PRODUCT_CONSTANTS.REQUIRED_IMAGE_COUNT) {
         return res.status(400).json({
             message: `Please upload exactly ${PRODUCT_CONSTANTS.REQUIRED_IMAGE_COUNT} images`
@@ -39,7 +39,7 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     } = req.body;
 
 
-    // Basic input validation
+    // Validate that the necessary date fields are provided
     if (!startingDate || !endingDate || !bidStartTime || !bidEndTime) {
         return res.status(400).json({
             message: 'All date and time fields are required'
@@ -47,7 +47,7 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     }
 
 
-    // Convert all dates to UTC Date objects
+    // Convert all date fields into Date objects
     const currentDate = new Date();
     const startDate = new Date(startingDate);
     const endDate = new Date(endingDate);
@@ -56,7 +56,7 @@ export const uploadProduct = asyncHandler(async (req, res) => {
 
 
     // ===== Date Range Validation =====
-    // Calculate the difference in days between start and end dates
+    // Ensure that the start date is in the future
     if (startDate <= currentDate) {
         return res.status(400).json({
             message: 'Starting Date Must be in the Future !'
@@ -64,6 +64,7 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     }
 
 
+    // Ensure that the end date is after the start date
     if (endDate <= startDate) {
         return res.status(400).json({
             message: 'Ending Date Must be After Starting Date !'
@@ -71,10 +72,11 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     }
 
 
-    // Calculate time difference between start and end dates in hours
+    // Calculate the duration between start and end dates in hours
     const hoursDifference = (endDate - startDate) / (1000 * 60 * 60);
 
-    // Validate 24-72 hour range (1-3 days)
+
+    // Ensure that the duration is between 24 and 72 hours (1-3 days)
     if (hoursDifference < 24 || hoursDifference > 72) {
         return res.status(400).json({
             message: 'The Duration Between Start and End Date Must be Between 24 and 72 Hours (1-3 Days) !'
@@ -82,7 +84,7 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     }
 
 
-    // Validate bid times are within the selected dates
+    // Ensure that the bid start and bid end times are within the selected date range
     if (bidStart < startDate || bidStart > endDate ||
         bidEnd < startDate || bidEnd > endDate) {
         return res.status(400).json({
@@ -91,11 +93,11 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     }
 
 
-    // Calculate bid duration in minutes
+    // Calculate the bid duration in minutes
     const bidDurationMinutes = (bidEnd - bidStart) / (1000 * 60);
 
 
-    // Validate bid duration (10-60 minutes)
+    // Ensure that the bid duration is between 10 and 60 minutes
     if (bidDurationMinutes < 10 || bidDurationMinutes > 60) {
         return res.status(400).json({
             message: 'Bid Duration Must be Between 10 and 60 Minutes !'
@@ -103,28 +105,34 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     }
 
 
-    // Image Upload Processing
+    // ===== Image Upload Processing =====
+    // Initialize an empty array to store the URLs of the uploaded images
     const imageUrls = [];
 
 
+    // Loop through each uploaded file and upload to Cloudinary
     for (const file of req.files) {
+        // Check if the file data is valid
         if (!file.mimetype || !file.buffer) {
             return res.status(400).json({
                 message: "Invalid File Data !"
             });
         }
 
+        // Convert file data to a base64 string
         const fileDataURI = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+
+        // Upload image to Cloudinary and get the image URL
         const cldRes = await handleUpload(fileDataURI);
         imageUrls.push(cldRes.secure_url);
     }
 
 
-    // Calculate total bid amount
+    // Calculate the total bid amount by multiplying starting price with quantity
     const totalBidAmount = startingPrice * quantity;
 
 
-    // Create new product
+    // Create a new product object with the data from the request
     const newProduct = new Product({
         farmer: req.user._id,
         name,
@@ -140,9 +148,11 @@ export const uploadProduct = asyncHandler(async (req, res) => {
     });
 
 
+    // Save the new product to the database
     const savedProduct = await newProduct.save();
 
 
+    // Respond with a success message and the saved product data
     res.status(201).json({
         message: "Product Created Successfully !",
         farmer: {

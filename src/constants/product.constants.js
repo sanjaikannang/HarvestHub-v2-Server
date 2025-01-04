@@ -13,6 +13,7 @@ export const PRODUCT_CONSTANTS = {
   };
   
   export const BIDDING_STATUS = {
+    UPCOMING: 'Upcoming',
     ACTIVE: 'Active',
     ENDED: 'Bidding Ended'
   };

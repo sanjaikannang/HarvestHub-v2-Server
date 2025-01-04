@@ -12,5 +12,7 @@ export const startCronJobs = () => {
         // Call the updateBiddingStatus function and pass the Product model
         // This function will update the bidding status for all products
         await updateBiddingStatus(Product);
+
+        console.log("Cron Job is Running for every Single Minute !");
     });
 };
